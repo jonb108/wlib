@@ -77,8 +77,9 @@ the output is:
 
 key is the word, value is 1
 this is just a lookup table.
-mklex is run just once as biglex.txt will not change.
-If add_to_lex or remove_from_lex changes mklex should be rerun.
+mklex is normally run just once as biglex.txt will not change.
+If add_to_lex.txt or remove_from_lex.txt changes
+mklex should be rerun.
 
 ========
 
@@ -108,8 +109,40 @@ mahavcheck has one parameter: a directory name
 The directory contains .txt files to process.
 There will be two .csv output files: dirname.csv and dirname_new.csv.
 
-This is what mahavcheck does:
-using...caps.txt
+mahavcheck does a lot:
+
+It verifies that all files in the directory are .txt files.
+Each .txt file gives rise to one line in the dirname.csv file.
+
+Words are extracted from the .txt file.
+A 'word' is a sequence of 'letters' (latin a-z, A-Z and unicode
+characters marked as Letter - including diacritic marked letters
+like ā, ś, Ś.  There could be
+internal hyphens or single quotes (or ’).
+
+These lines have 7 columns:
+
+A: the .txt file name (without dirname)
+B: words found in the english or sanskrit files
+C: words found in the names file
+D: words found in the techniques file
+E: alternate words
+F: new words
+G: discarded words
+
+All words deemed to be 'new' are sorted alphabetically
+and added to the dirname_new.csv file.   Lines have two
+columns:
+
+word, "file1, file2, ..."
+
+where the word was found in each of the listed filenames (only
+    the .txt without the dirname)
+
+
+mahavcheck has a -d option to help with debugging:
+
+% mahavcheck -d test_files
 
 ========
 

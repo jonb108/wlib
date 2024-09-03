@@ -1,0 +1,32 @@
+#!/usr/bin/perl 
+use strict;
+use warnings;
+use open ":std", ":encoding(UTF-8)";
+use lib '.';
+use Text::CSV_PP;
+my $csv = Text::CSV_PP->new({ binary => 1, auto_diag => 1});
+use Encode qw/
+    encode_utf8
+    decode_utf8
+/;
+use DB_File;
+unlink 'excluded.dbm';
+my %excluded;
+tie %excluded, 'DB_File', 'excluded.dbm';
+
+open my $in, '<:encoding(utf8)', 'prohibited.csv'
+    or die "no prohibited.csv: $!\n";
+my @words;
+my $first_header_aref = $csv->getline($in);
+while (my $aref = $csv->getline($in)) {
+    my $word = encode_utf8($aref->[3]);
+    if ($word !~ m{\A --}xms) {
+        if (exists $excluded{$word}) {
+            print "dup: ", decode_utf8($word), "\n";
+        }
+        else {
+            $excluded{$word} = 1;
+        }
+    }
+}
+close $in;

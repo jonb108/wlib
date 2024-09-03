@@ -1,0 +1,15 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+my $dbm_file = shift;
+if ($dbm_file !~ m{[.]dbm \z}xms) {
+    die "$dbm_file does not have a .dbm suffix!\n";
+}
+
+use DB_File;
+my %hash;
+tie %hash, 'DB_File', $dbm_file;
+while (my ($key, $value) = each %hash) {
+    print "$key => $value\n";
+}

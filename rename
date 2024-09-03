@@ -1,0 +1,11 @@
+#!/usr/bin/env perl
+rename '2024 Vocabulary list  - English and Other.csv',
+       'english.csv';
+rename '2024 Vocabulary list  - Sanskrit_Hindi.csv',
+       'sanskrit.csv';
+rename '2024 Vocabulary list  - Names of Persons.csv',
+       'names.csv';
+rename '2024 Vocabulary list  - Techniques.csv',
+       'techniques.csv';
+rename '2024 Vocabulary list  - Prohibited Terms.csv',
+       'prohibited.csv';

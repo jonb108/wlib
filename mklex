@@ -1,0 +1,28 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use DB_File;
+
+unlink 'lex.dbm';
+my %lex;
+tie %lex, 'DB_File', 'lex.dbm';
+open my $in, '<', 'biglex.txt';
+while (my $word = <$in>) {
+    chomp $word;
+    $lex{$word} = 1; 
+}
+close $in;
+
+open my $add, '<', 'add_to_lex.txt';
+for my $w (<$add>) {
+    chomp $w;
+    $lex{$w} = 1;
+}
+close $add;
+
+open my $remove, '<', 'remove_from_lex.txt';
+for my $w (<$remove>) {
+    chomp $w;
+    delete $lex{$w};
+}
+close $remove;

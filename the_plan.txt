@@ -1,0 +1,123 @@
+Hi Sahadev,
+
+I hope this finds you well. 2 months after I thought we
+would be finished, we are finished.  Well not exactly.
+We still have to get feedback about a few troublesome
+words from our Sanskrit scholars. But all in all we have
+completed our processes.  I am enclosing the new vocabulary
+lists as .csv file. I was only able to download them sheet
+by sheet. I am also enclosing the older Vcheck application.
+We will now embark on correcting existing items and using
+the updated Vcheck to expand the metadata and bring it
+into compliance w the newer vocabulary list. Your Vcheck
+renewal will be of significant importance in allowing us
+to accomplish this task.
+
+Overview:
+
+VCheck needs to compare the list of source words in the
+ready/<filename>.txt file to the official vocabulary
+lists. There are now 4 different official lists, all of
+which are in one spreadsheet file, “2024 Vocabulary
+list”. It will also compare the source words to
+a prohibited word list which is one sheet within the
+Official Vocabulary List File.  <Prohibited Terms>. The
+number of outputs has increased from 3 to 6 (Official
+Word, Names of Persons, Techniques, Variations, New Words,
+and Prohibited Words)
+
+Vocabulary Lists:
+
+The Official Vocabulary list file, 2024 Vocabulary List,
+is a spreadsheet file with 5 different sheets, Sanskrit,
+English, Names of Persons, Techniques and Prohibited
+Terms. Each word in a source document has to be compared
+to the lists of official words (Sanskrit and English) as
+well as names, techniques, and prohibited words of these
+official lists.
+
+About Official Words:
+
+Official Words are found in the sheets named:
+“Sanskrit” and “English.  these words complete the
+metadata field “dc.subject.keyword” and all are found
+in Column D of these official vocabulary lists. When
+there are more variations than 7, there is second row
+of the same official word has been made., (There are
+occasionally 3 rows). We want only one instance of the
+official word; the redundancies of those official words
+need to be removed. All variations from any and all of
+related rows are a match and are entered into the output
+for word variations
+
+Names and Techniques are New to VCHeck:
+
+Official Names are found in the file Names of Persons
+sheet.  And Official Techniques are found in the file
+Techniques sheet. Again, the variations, of these official
+names and terms are also included in the same output, i.e.,
+2) variations, as for the variations of the Official Words.
+There is no need to separate them from the variations of
+the Official words.
+
+Prohibited Terms:
+
+Prohibited terms are words that have been considered and
+deemed to not be important for Library purposes and will
+not be used as Keywords, variations, etc. When a match
+occurs with a Source word and a word in the prohibited
+list, that source word will be placed in a Discard output
+cell.
+
+Outputs:
+
+There are now 6 possible outputs from this comparison for
+each source file used in comparison. The Vcheck application
+may find, using each source word from a source file, a
+match to 1) an official word, when the match arises from
+any of the appropriate columns of the English list or the
+Sanskrit list, 2) the word variation(s), being the. other
+words of the same row as the official word, name of person
+, or technique that corresponds to the source word, 3)
+an official name when the match is from the Official
+Name of Person list, 4) an official technique, when the
+match is from the Official Technique list, 5) a prohibited
+word, and there may be no match, in which case it is 6) a
+“New Word”. Note that the word variation now includes
+variations of Names and of techniques whereas in the past
+VCheck was only asked for variations of Official Words.
+
+The output from the Vcheck application will be a .csv
+file with the file values separated into 8 columns with
+A.) headers of “file name”, B.) “dc.subject.keyword
+“(Official Words), C.) “dc.subject.person (Official
+Person’s Name),D.) “dc.subject.technique” (Official
+Technique, E.)“dc.subject.;other” (all variations),
+F.) “New Words” and finally G.)“discards”. The rows
+have the source file name as the row header title. Values
+with the cell for Columns B-E are separated by ||
+separators. The others (F and G) are comma separated.
+
+Wishful thinking: In the past we left the New Words alone
+until we reached a critical mass 500 items) and revised
+the vocabulary list. In order to make those revisions
+you helped by offering us various tools to process the
+new words.  Your tools gave us the following outputs:
+
+New words listed uniquely with all source documents
+associated with each.  Comparison against your lexicon
+of English words so as to have a first sort of English
+vs. Non-English words. (giving us 2 outputs: English
+words found in New Word and lexicon and words not found
+in lexicon) We anticipate processing new words every 20
+or so items ingested into the library to make the job much
+easier to handle.
+
+call me w any questions.  I know Prabhawati who has been
+instrumental in the Vocabulary list process would both
+benefit and contribute if she can participate in our
+planning calls.
+
+I hope you have survived the heat.
+
+-- Peace रमेश् jono

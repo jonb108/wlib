@@ -1,0 +1,112 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use utf8;
+use Encode qw/
+    encode_utf8
+    decode_utf8
+/;
+use open ":std", ":encoding(UTF-8)";
+use DB_File;
+use lib '.';
+use Text::CSV_PP;
+my $csv = Text::CSV_PP->new({ binary => 1, auto_diag => 1});
+
+sub trim {
+    my ($s) = @_;
+    $s =~ s{\A \s+ | \s+ \z}{}xmsg;
+    $s;
+}
+
+unlink 'vocab.dbm';
+my %vocab;
+tie %vocab, 'DB_File', 'vocab.dbm';
+open my $vocab_sp, '>', 'vocab_sp.txt'
+    or die "no vocab_sp.txt: $!\n";
+
+unlink 'names.dbm';
+my %names;
+tie %names, 'DB_File', 'names.dbm';
+open my $names_sp, '>', 'names_sp.txt'
+    or die "no names_sp.txt: $!\n";
+
+unlink 'techniques.dbm';
+my %techniques;
+tie %techniques, 'DB_File', 'techniques.dbm';
+open my $techniques_sp, '>', 'techniques_sp.txt'
+    or die "no techniques_sp.txt: $!\n";
+
+unlink 'alternates.dbm';
+my %alternates;
+tie %alternates, 'DB_File', 'alternates.dbm';
+
+sub process {
+    my ($file, $type) = @_;
+    open my $in, '<:encoding(utf8)', $file 
+        or die "no $file";
+    my $first_header_aref = $csv->getline($in);
+    while (my $aref = $csv->getline($in)) {
+        my $word = trim(encode_utf8($aref->[3]));
+        my $sp = $word =~ /\s/;
+        my $de_word = decode_utf8($word);
+        if ($type eq 'word') {
+            if ($sp) {
+                print {$vocab_sp} "$de_word\n";
+            }
+            $vocab{$word} = $word;
+        }
+        elsif ($type eq 'name') {
+            if ($sp) {
+                print {$names_sp} "$de_word\n";
+            }
+            $names{$word} = $word;
+        }
+        elsif ($type eq 'technique') {
+            if ($sp) {
+                print {$techniques_sp} "$de_word\n";
+            }
+            $techniques{$word} = $word;
+        }
+        else {
+            die "$type is not word, name, or technique!\n";
+        }
+        my @alt_words;
+        for my $i (4 .. $#$aref) {
+            if ($aref->[$i] =~ /\S/) {      # it's not empty
+                my $alt_word = trim(encode_utf8($aref->[$i]));
+                my $sp = $alt_word =~ /\s/;
+                my $de_alt_word = decode_utf8($alt_word);
+                if ($type eq 'word') {
+                    if ($sp) {
+                        print {$vocab_sp} "$de_alt_word\n";
+                    }
+                    $vocab{$alt_word} = $word;
+                }
+                elsif ($type eq 'name') {
+                    if ($sp) {
+                        print {$names_sp} "$de_alt_word\n";
+                    }
+                    $names{$alt_word} = $word;
+                }
+                elsif ($type eq 'technique') {
+                    if ($sp) {
+                        print {$techniques_sp} "$de_alt_word\n";
+                    }
+                    $techniques{$alt_word} = $word;
+                }
+                else {
+                    die "$type is not word, name, or technique!\n";
+                }
+                push @alt_words, $alt_word;
+            }
+        }
+        if (@alt_words) {
+            $alternates{$word} .= join('||', @alt_words) . '||';
+        }
+    }
+}
+
+process('english.csv',    'word');
+process('sanskrit.csv',   'word');
+process('names.csv',      'name');
+process('techniques.csv', 'technique');

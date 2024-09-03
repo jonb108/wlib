@@ -1,0 +1,165 @@
+This is the sequence of commands:
+
+% rename
+% mkvocab
+% undup_alt
+% mklex
+% mkexcluded
+% mahavcheck dir out.csv
+
+========
+
+Renamed .csv files:
+
+english.csv     <= 2024 Vocabulary list  - English and Other.csv
+sanskrit.csv    <= 2024 Vocabulary list  - Sanskrit_Hindi.csv
+names.csv       <= 2024 Vocabulary list  - Names of Persons.csv
+techniques.csv  <= 2024 Vocabulary list  - Techniques.csv
+prohibited.csv  <= 2024 Vocabulary list  - Prohibited Terms.csv
+
+The five 2024 Vocabulary ... filenames (as exported from the spreadsheet)
+are problematic given their internal spaces and the possible '-2'
+suffix in front of the .csv suffix.  There is the command 'rename'
+to help with the renaming to simpler standard filenames.
+When exporting from the spreadsheet (Excel or Numbers)
+it is best to _replace_ the existing file rather than adding the -2 suffix.
+
+========
+
+'mkvocab' is run once and has these .csv files as input:
+    english.csv
+    sanskrit.csv
+    names.csv
+    techniques.csv
+the output is:
+    vocab.dbm       # from english and sanskrit
+    alternates.dbm  # from all the .csv files
+    names.dbm       # from names.csv
+    techniques.dbm  # from techniques.csv
+
+The 4th column in the .csv file is the "official word".
+Subsequent words are alternates for the word.
+For english.csv and sanskrit.csv
+the official word and all alternate words
+are entered as keys of vocab.dbm with the value being
+the official word.  The alternate words are entered into
+alternates.dbm with the key being the official word
+and the value being all alternates separated by ||.
+
+names.csv and techniques.csv are processed similarly
+except that names.dbm and techniques.dbm are used
+instead of vocab.dbm.   alternate words are still put
+in alternates.dbm (|| separated).
+
+'mkvocab' will deal properly with multiple lines (even if not adjacent)
+having the same official word.
+
+if an official word or an alternate word has a space in it
+it is processed differently.  Instead of placing it in the vocab.dbm
+file (or names.dbm or techniques.dbm) it is put in a file named
+vocab_sp.txt (or names_sp.txt or techniques_sp.dbm).  These phrases
+are processed differently than the single words.  They ARE still
+placed in the alternates.dbm file (as keys or values).
+
+after running 'mkvocab' you run 'undup_alt' to remove duplicates
+from alternates.dbm.  it reports how many official words had duplicates.
+
+if the 4 .csv input files change you must run 'mkvocab' and 'undup_alt' again.
+
+========
+
+'mklex' has these files as input:
+    biglex.txt      # from /usr/share/dict/words on OSX
+    add_to_lex.txt
+    remove_from_lex.txt
+the output is:
+    lex.dbm
+
+key is the word, value is 1
+this is just a lookup table.
+mklex is run just once as biglex.txt will not change.
+If add_to_lex or remove_from_lex changes mklex should be rerun.
+
+========
+
+'mkexcluded' has this file as input:
+    prohibited.csv
+the output is:
+    excluded.dbm
+
+it takes words in the 4th column and 
+    uses them as keys in excluded.dbm
+    the value is 1
+
+duplicate words are reported
+
+if the prohibited.csv file changes, mkexcluded must be run again.
+
+========
+
+the .dbm files can be viewed with:
+    % dump_dbm fname.dbm
+
+========
+
+% mahavcheck dirname
+
+mahavcheck has one parameter: a directory name
+The directory contains .txt files to process.
+There will be two .csv output files: dirname.csv and dirname_new.csv.
+
+This is what mahavcheck does:
+using...caps.txt
+
+========
+
+Needed files:
+
+the_plan.txt
+how.txt
+mkvocab
+undup_alt
+add_to_lex.txt
+remove_from_lex.txt
+biglex.txt
+mklex
+mkexcluded
+mahavcheck
+Text/CSV_PP.pm
+dump_dbm
+
+A tar command to help with the transfers:
+
+% tar cvf vch.tar the_plan.txt how.txt mkvocab undup_alt add_to_lex.txt remove_from_lex.txt biglex.txt mklex mkexcluded mahavcheck Text/CSV_PP.pm dump_dbm english.csv sanskrit.csv names.csv techniques.csv prohibited.csv rename
+
+========
+
+make a test file as simple as possible
+    that deals with words, names, and techniques
+    include words/names/techniques and their variations
+    words and alternates with spaces - using regex on the whole file
+    have Ramesh validate it
+
+do it on your machine then push to akash2
+    for git repo
+
+Questions for Ramesh and Prabhawati:
+
+I have renamed 'Official ... English...' to english.csv
+    and ditto for the others
+VERY long output lines - one per file
+case sensitive? - not for the ITRANS words where
+    upper case vowels have meaning
+    what about words in english.csv?
+spaces in terms make for extra trouble and processing time
+    because a regex search will be needed against the
+    entire file
+tell him about things that need fixing
+    Shakepeare - missing s
+    Amar Dass Greg Gludt (Amar) - need Amar, Amar Dass, yes?
+        and other names as well
+    share the output of undup_alt
+I am not questioning WHY he wants these things.
+I just want to make sure precisely what he wants.
+
+do some feasability testing with regex and (de|en)code_utf8

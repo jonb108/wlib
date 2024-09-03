@@ -1,0 +1,276 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use DB_File;
+use open ':encoding(utf8)';
+use List::Util qw/
+    uniq
+/;
+use Encode qw/
+    encode_utf8
+    decode_utf8
+/;
+use lib '.';
+use Text::CSV_PP;
+my $csv = Text::CSV_PP->new({ binary => 1, auto_diag => 1});
+
+my $debug = 0;
+if ($ARGV[0] eq '-d') {
+    $debug = 1;
+    shift @ARGV;
+}
+
+if (@ARGV != 1) {
+    die "usage: vcheck dirname\n";
+}
+my $dir = shift;
+if (! -d $dir) {
+    die "$dir is not a directory\n";
+}
+my $csv_fname = "$dir.csv";
+my $csv_fname_new = "$dir\_new.csv";
+my @files = <$dir/*>;
+for my $f (@files) {
+    if ($f !~ m{ [.]txt\z }xms) {
+        die "$f does not have .txt suffix\n";
+    }
+}
+
+open my $csv_out, '>:encoding(utf8)', $csv_fname
+    or die "no $csv_fname: $!\n";
+$csv->say($csv_out, [
+    'file name',            # A
+    'dc.subject.keyword',   # B
+    'dc.subject.person',    # C
+    'dc.subject.technique', # D
+    'dc.subject.other',     # E
+    'New Words',            # F
+    'discards',             # G
+]);
+
+open my $csv_out_new, '>:encoding(utf8)', "$csv_fname_new"
+    or die "no new_$csv_fname_new: $!\n";
+$csv->say($csv_out_new, [
+    'new word',     # A
+    'filenames',    # B
+]);
+my %new_word_files; # key is word
+                    # value is the comma separated file names
+                    # where that word occurred.
+
+# 6 DBM files
+my (%vocab, %names, %techniques, %alternates, %lex, %excluded);
+tie %vocab,      'DB_File', 'vocab.dbm';
+tie %alternates, 'DB_File', 'alternates.dbm';
+tie %names,      'DB_File', 'names.dbm';
+tie %techniques, 'DB_File', 'techniques.dbm';
+tie %lex,        'DB_File', 'lex.dbm';
+tie %excluded,   'DB_File', 'excluded.dbm';
+
+# 3 text files for space regexes
+my @vocab_sp      = get_sp('vocab_sp.txt');
+my @names_sp      = get_sp('names_sp.txt');
+my @techniques_sp = get_sp('techniques_sp.txt');
+
+# a file of Harvard-Kyoto and iTRANS words with 
+# an initial capital letter.  make a lookup table.
+my %caps;
+open my $caps, '<', 'caps.txt'
+    or die "no caps.txt: $!\n";
+while (my $line = <$caps>) {
+    chomp $line;
+    $caps{$line} = 1;
+}
+close $caps;
+
+sub get_sp {
+    my ($fname) = @_;
+    open my $in, '<', $fname or die "no $fname: $!\n";
+    my @array = <$in>;
+    close $in;
+    chomp @array;
+    return @array;
+}
+
+for my $f (@files) {
+    process($f);
+}
+close $csv_out;
+
+# the new words in a separate .csv file
+for my $w (sort keys %new_word_files) {
+
+    # a new word might occur more than once in a file
+    # so we eliminate duplicates at the same time
+    # that we remove the final comma
+    $new_word_files{$w} = join ', ',
+                          uniq
+                          split ',',
+                          $new_word_files{$w};
+
+    $csv->say($csv_out_new, [
+        $w,
+        $new_word_files{$w},
+    ]);
+}
+close $csv_out_new;
+
+# decode_utf8, join, uniq, sort, split
+sub fix {
+    my ($sep, @words) = @_;
+    my @arr;
+    for my $w (@words) {
+        push @arr, split m{\Q$sep\E}xms, $w;
+    }
+    return decode_utf8(join $sep, uniq(sort @arr));
+}
+
+sub process {
+    my ($fname) = @_;
+    open my $in, '<:encoding(utf8)', $fname
+        or die "cannot open $fname: $!\n";
+    my $no_dir_fname = $fname;
+    $no_dir_fname =~ s{\A $dir/}{}xms;
+
+    my $full_text;
+    {
+        local $/;
+        no warnings;
+        $full_text = encode_utf8(<$in>);
+        close $in;
+    }
+    # \pL is the unicode character class for 'letters'.
+    # see perldoc perlunicode.
+    # we look for words with at least 2 letters with
+    # a possible ' or - in the middle.
+    #
+    my @words = $full_text =~ m!(\p{Letter}[\p{Letter}'’-]*\p{Letter})!xmsg; 
+    if ($debug) {
+        print "1: $fname: @words\n"; <STDIN>;
+    }
+
+    # what about single letter words like I or a??
+    # ignored??
+ 
+    # words that *begin* with a capital letter
+    # should have that letter lowercased.
+    # do not do this if a word is in the caps.txt file.
+    #
+    # this initial capital letter will mostly be A-Z but
+    # maybe also the upper case diacritic'ed letters
+    # like Ācāra => ācāra or śhabda => Śhabda
+    #
+    for my $w (@words) {
+        $w =~ s{’s}{}xmsg;                  # Lakshmi’s
+        $w =~ s{[\p{^Letter}…] \z}{}xmsg;   # terminal non-Letter - plus …
+        if (! exists $caps{$w} && $w =~ m{\A \p{Lu}}xms) {
+            $w =~ s{\A (\p{Lu}) }{lc $1}xmse;
+        }
+    }
+
+    @words = uniq sort @words;
+
+    if ($debug) {
+        print "2: $fname: @words\n"; <STDIN>;
+    }
+
+    my @eng_san_words;
+    my @name_words;
+    my @technique_words;
+    my @alt_words;
+    my @new_words;
+    my @discard_words;
+    WORD:
+    for my $w (@words) {
+        if (exists $names{$w}) {
+            my $x = $names{$w};
+            push @name_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+        elsif (exists $techniques{$w}) {
+            my $x = $techniques{$w};
+            push @technique_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+            push @alt_words, $alternates{$x};
+        }
+        elsif (exists $vocab{$w}) {
+            my $x = $vocab{$w};
+            push @eng_san_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+        else {
+            # shall we include it in the new words list?
+            # or toss it into the discard list
+            if (exists $excluded{$w}) {
+                push @discard_words, $w;
+            }
+            elsif ($lex{$w}) {
+                push @new_words, $w;
+                $new_word_files{$w} .= "$no_dir_fname,";
+            }
+            elsif ($w =~ m{ly \z}xms) {
+                my $x = $w;
+                $x =~ s{ly \z}{}xms;
+                if ($lex{$x}) {
+                    push @new_words, $w;
+                    $new_word_files{$w} .= "$no_dir_fname,";
+                }
+                else {
+                    push @discard_words, $w;
+                }
+            }
+            else {
+                push @discard_words, $w;
+            }
+        }
+    }
+    # now for the 3 sets of regex space words
+    for my $w (@vocab_sp) {
+        my $sp = $w;
+        $sp =~ s{\s+}{\\s+}xmsg;
+        if ($full_text =~ m{$sp}xms) {
+            my $x = $vocab{$w};
+            push @eng_san_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+    }
+    for my $w (@names_sp) {
+        my $sp = $w;
+        $sp =~ s{\s+}{\\s+}xmsg;
+        if ($full_text =~ m{$sp}xms) {
+            my $x = $names{$w};
+            push @name_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+    }
+    for my $w (@techniques_sp) {
+        my $sp = $w;
+        $sp =~ s{\s+}{\\s+}xmsg;
+        if ($full_text =~ m{$sp}xms) {
+            my $x = $techniques{$w};
+            push @technique_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+    }
+    $csv->say($csv_out, [
+        $no_dir_fname,               # A
+        fix('||', @eng_san_words),   # B
+        fix('||', @name_words),      # C
+        fix('||', @technique_words), # D
+        fix('||', @alt_words),       # E
+        fix(',',  @new_words),       # F
+        fix(',',  @discard_words),   # G
+    ]);
+}

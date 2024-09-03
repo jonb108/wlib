@@ -1,0 +1,24 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use List::Util qw/
+    uniq
+/;
+use DB_File;
+my %alternates;
+tie %alternates, 'DB_File', 'alternates.dbm';
+
+my $ndups = 0;
+while (my ($k, $v) = each %alternates) {
+    my @words = split '\|\|', $v;
+    my @uwords = uniq @words;
+    if (@words != @uwords) {
+        print "$k had dups: @words\n";
+        ++$ndups;
+        $alternates{$k} = join '||', @uwords;
+    }
+    elsif ($v =~ s{\|\| \z}{}xms) {
+        $alternates{$k} = $v;
+    }
+}
+print "$ndups dups\n";

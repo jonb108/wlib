@@ -1,11 +1,44 @@
 #!/usr/bin/env perl
-rename '2024 Vocabulary list  - English and Other.csv',
-       'english.csv';
-rename '2024 Vocabulary list  - Sanskrit_Hindi.csv',
-       'sanskrit.csv';
-rename '2024 Vocabulary list  - Names of Persons.csv',
-       'names.csv';
-rename '2024 Vocabulary list  - Techniques.csv',
-       'techniques.csv';
-rename '2024 Vocabulary list  - Prohibited Terms.csv',
-       'prohibited.csv';
+use strict;
+use warnings;
+my @names = qw/
+    English
+    Sanskrit
+    Names
+    Techniques
+    Prohibited
+/;
+my @fnames;
+NAME:
+for my $n (@names) {
+    my @files = <*$n*>;
+    if (! @files) {
+        # print "no file with $n\n";
+        next NAME;
+    }
+    if (@files > 1) {
+        die "more than one file with $n\n";
+    }
+    my $new_name = lc "$n.csv";
+    rename $files[0], $new_name;
+    push @fnames, $new_name;
+}
+
+for my $f (@fnames) {
+    # MSDOS to Unix
+    system("perl -p -i -e 's///g' $f");
+    {
+        open my $in, '<', $f
+            or die "could not open $f: $!\n";
+        local $/;
+        my $s = <$in>;
+        close $in;
+        if ($s !~ m{\n \z}xms) {
+            # no EOL at end of file
+            open my $out, '>>', $f
+                or die "could not append to $f: $!\n";
+            print {$out} "\n";
+            close $out;
+        }
+    }
+}

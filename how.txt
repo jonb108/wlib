@@ -19,13 +19,9 @@ prohibited.csv  <= 2024 Vocabulary list  - Prohibited Terms.csv
 
 The five 2024 Vocabulary ... filenames (as exported from the spreadsheet)
 are problematic given their internal spaces and the possible '-2' (or -3)
-suffix in front of the .csv suffix.  There is the command 'rename'
-to help with the renaming to simpler standard filenames.
-When exporting from the spreadsheet (Excel or Numbers)
-it is best to _replace_ the existing file rather than adding the -2 suffix.
-
-There is also the issue of DOS format end-of-line (EOL) ^M characters
-and a missing final EOL.  This may be taken care of by Perl.
+in front of the .csv suffix.  There is the command 'rename'
+to help with the renaming these files to simpler standard filenames
+(and to convert MSDOS line endings to unix).
 
 I have versioned the 5 .csv files.
 

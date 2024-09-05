@@ -18,7 +18,7 @@ techniques.csv  <= 2024 Vocabulary list  - Techniques.csv
 prohibited.csv  <= 2024 Vocabulary list  - Prohibited Terms.csv
 
 The five 2024 Vocabulary ... filenames (as exported from the spreadsheet)
-are problematic given their internal spaces and the possible '-2'
+are problematic given their internal spaces and the possible '-2' (or -3)
 suffix in front of the .csv suffix.  There is the command 'rename'
 to help with the renaming to simpler standard filenames.
 When exporting from the spreadsheet (Excel or Numbers)

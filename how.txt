@@ -24,6 +24,11 @@ to help with the renaming to simpler standard filenames.
 When exporting from the spreadsheet (Excel or Numbers)
 it is best to _replace_ the existing file rather than adding the -2 suffix.
 
+There is also the issue of DOS format end-of-line (EOL) ^M characters
+and a missing final EOL.  This may be taken care of by Perl.
+
+I have versioned the 5 .csv files.
+
 ========
 
 'mkvocab' is run once and has these .csv files as input:

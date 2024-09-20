@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use DB_File;
-use open ':encoding(utf8)';
+use open ':std', ':encoding(utf8)';
 use List::Util qw/
     uniq
 /;
@@ -127,6 +127,7 @@ sub fix {
 
 sub process {
     my ($fname) = @_;
+    print "$fname\n";
     open my $in, '<:encoding(utf8)', $fname
         or die "cannot open $fname: $!\n";
     my $no_dir_fname = $fname;
@@ -136,7 +137,8 @@ sub process {
     {
         local $/;
         no warnings;
-        $full_text = encode_utf8(<$in>);
+        $full_text = <$in>;
+        #$full_text = encode_utf8($full_text);
         close $in;
     }
     # \pL is the unicode character class for 'letters'.
@@ -182,23 +184,24 @@ sub process {
     my @discard_words;
     WORD:
     for my $w (@words) {
-        if (exists $names{$w}) {
-            my $x = $names{$w};
+        my $ew = encode_utf8($w);
+        if (exists $names{$ew}) {
+            my $x = $names{$ew};
             push @name_words, $x;
             if (exists $alternates{$x}) {
                 push @alt_words, $alternates{$x};
             }
         }
-        elsif (exists $techniques{$w}) {
-            my $x = $techniques{$w};
+        elsif (exists $techniques{$ew}) {
+            my $x = $techniques{$ew};
             push @technique_words, $x;
             if (exists $alternates{$x}) {
                 push @alt_words, $alternates{$x};
             }
             push @alt_words, $alternates{$x};
         }
-        elsif (exists $vocab{$w}) {
-            my $x = $vocab{$w};
+        elsif (exists $vocab{$ew}) {
+            my $x = $vocab{$ew};
             push @eng_san_words, $x;
             if (exists $alternates{$x}) {
                 push @alt_words, $alternates{$x};
@@ -207,10 +210,10 @@ sub process {
         else {
             # shall we include it in the new words list?
             # or toss it into the discard list
-            if (exists $excluded{$w}) {
-                push @discard_words, $w;
+            if (exists $excluded{$ew}) {
+                push @discard_words, $ew;
             }
-            elsif ($lex{$w}) {
+            elsif ($lex{$ew}) {
                 push @new_words, $w;
                 $new_word_files{$w} .= "$no_dir_fname,";
             }
@@ -222,11 +225,11 @@ sub process {
                     $new_word_files{$w} .= "$no_dir_fname,";
                 }
                 else {
-                    push @discard_words, $w;
+                    push @discard_words, $ew;
                 }
             }
             else {
-                push @discard_words, $w;
+                push @discard_words, $ew;
             }
         }
     }

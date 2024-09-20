@@ -1,4 +1,4 @@
 *.dbm
-test*
 *_sp.txt
+test*csv
 biglex.txt

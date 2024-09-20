@@ -22,7 +22,7 @@ while (my $aref = $csv->getline($in)) {
     my $word = encode_utf8($aref->[3]);
     if ($word !~ m{\A --}xms) {
         if (exists $excluded{$word}) {
-            print "dup: ", decode_utf8($word), "\n";
+            print "duplicate: ", decode_utf8($word), "\n";
         }
         else {
             $excluded{$word} = 1;

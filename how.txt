@@ -64,13 +64,14 @@ placed in the alternates.dbm file (as keys or values).
 
 after running 'mkvocab' you run 'undup_alt' to remove duplicates
 from alternates.dbm.  it reports how many official words had duplicates.
+If you run undup_alt twice the second time should show 0 duplicates.
 
 if the 4 .csv input files change you must run 'mkvocab' and 'undup_alt' again.
 
 ========
 
 'mklex' has these files as input:
-    biglex.txt      # from /usr/share/dict/words on OSX
+    biglex.txt      # copied from /usr/share/dict/words on OSX
     add_to_lex.txt
     remove_from_lex.txt
 the output is:

@@ -13,7 +13,7 @@ while (my ($k, $v) = each %alternates) {
     my @words = split '\|\|', $v;
     my @uwords = uniq @words;
     if (@words != @uwords) {
-        print "$k had dups: @words\n";
+        print "$k had duplicates: @words\n";
         ++$ndups;
         $alternates{$k} = join '||', @uwords;
     }
@@ -21,4 +21,4 @@ while (my ($k, $v) = each %alternates) {
         $alternates{$k} = $v;
     }
 }
-print "$ndups dups\n";
+print "$ndups total duplicates\n";

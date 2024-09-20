@@ -273,7 +273,6 @@ sub process {
         fix('||', @name_words),      # C
         fix('||', @technique_words), # D
         fix('||', @alt_words),       # E
-        fix(',',  @new_words),       # F
-        fix(',',  @discard_words),   # G
+        fix(',',  @discard_words),   # F
     ]);
 }

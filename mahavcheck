@@ -127,11 +127,11 @@ sub fix {
 
 sub process {
     my ($fname) = @_;
-    print "$fname\n";
     open my $in, '<:encoding(utf8)', $fname
         or die "cannot open $fname: $!\n";
     my $no_dir_fname = $fname;
     $no_dir_fname =~ s{\A $dir/}{}xms;
+    print "$no_dir_fname\n";
 
     my $full_text;
     {

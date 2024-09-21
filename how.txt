@@ -122,15 +122,14 @@ characters marked as Letter - including diacritic marked letters
 like ā, ś, Ś.  There could be
 internal hyphens or single quotes (or ’).
 
-These lines have 7 columns:
+These lines have 6 columns:
 
 A: the .txt file name (without dirname)
 B: words found in the english or sanskrit files
 C: words found in the names file
 D: words found in the techniques file
 E: alternate words
-F: new words
-G: discarded words
+F: discarded words
 
 All words deemed to be 'new' are sorted alphabetically
 and added to the dirname_new.csv file.   Lines have two

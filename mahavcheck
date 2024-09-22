@@ -32,9 +32,10 @@ my $csv_fname_new = "$dir\_new.csv";
 my @files = <$dir/*>;
 for my $f (@files) {
     if ($f !~ m{ [.]txt\z }xms) {
-        die "$f does not have .txt suffix\n";
+        print "$f\n";
     }
 }
+@files = grep { /[.]txt\z/ } @files;
 
 open my $csv_out, '>:encoding(utf8)', $csv_fname
     or die "no $csv_fname: $!\n";
@@ -44,8 +45,7 @@ $csv->say($csv_out, [
     'dc.subject.person',    # C
     'dc.subject.technique', # D
     'dc.subject.other',     # E
-    'New Words',            # F
-    'discards',             # G
+    'discards',             # F
 ]);
 
 open my $csv_out_new, '>:encoding(utf8)', "$csv_fname_new"

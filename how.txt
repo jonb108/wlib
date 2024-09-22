@@ -164,7 +164,7 @@ dump_dbm
 
 A tar command to help with the transfers:
 
-% tar cvf vch.tar the_plan.txt how.txt mkvocab undup_alt add_to_lex.txt remove_from_lex.txt biglex.txt mklex mkexcluded mahavcheck Text/CSV_PP.pm dump_dbm english.csv sanskrit.csv names.csv techniques.csv prohibited.csv rename
+% tar cvf vch.tar caps.txt the_plan.txt how.txt mkvocab undup_alt add_to_lex.txt remove_from_lex.txt biglex.txt mklex mkexcluded mahavcheck Text/CSV_PP.pm dump_dbm english.csv sanskrit.csv names.csv techniques.csv prohibited.csv rename
 
 ========
 

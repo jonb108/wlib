@@ -20,6 +20,7 @@ for my $n (@names) {
         die "more than one file with $n\n";
     }
     my $new_name = lc "$n.csv";
+    print "$files[0] => $new_name\n";
     rename $files[0], $new_name;
     push @fnames, $new_name;
 }

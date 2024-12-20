@@ -114,6 +114,7 @@ There will be two .csv output files: dirname.csv and dirname_new.csv.
 mahavcheck does a lot:
 
 It verifies that all files in the directory are .txt files.
+Files that are NOT .txt files are ignored and an error message is printed.
 Each .txt file gives rise to one line in the dirname.csv file.
 
 Words are extracted from each .txt file.

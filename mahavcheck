@@ -32,7 +32,7 @@ my $csv_fname_new = "$dir\_new.csv";
 my @files = <$dir/*>;
 for my $f (@files) {
     if ($f !~ m{ [.]txt\z }xms) {
-        print "$f\n";
+        print "IGNORING $f\n";
     }
 }
 @files = grep { /[.]txt\z/ } @files;

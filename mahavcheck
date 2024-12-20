@@ -257,10 +257,11 @@ sub process {
         }
     }
     for my $w (@techniques_sp) {
+        my $ew = encode_utf8($w);
         my $sp = $w;
         $sp =~ s{\s+}{\\s+}xmsg;
         if ($full_text =~ m{$sp}xms) {
-            my $x = $techniques{$w};
+            my $x = $techniques{$ew};
             push @technique_words, $x;
             if (exists $alternates{$x}) {
                 push @alt_words, $alternates{$x};

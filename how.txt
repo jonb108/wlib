@@ -142,7 +142,6 @@ word, "file1, file2, ..."
 where the word was found in each of the listed filenames (only
     the .txt filename - without the dirname)
 
-
 mahavcheck has a -d option to help with debugging:
 
 % mahavcheck -d test_files

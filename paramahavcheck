@@ -2,22 +2,26 @@
 use strict;
 use warnings;
 
-my $debug = 1;
+my $debug = 0;
+if (@ARGV && $ARGV[0] eq '-d') {
+    shift;
+    $debug = 1;
+}
 
 if (@ARGV != 2) {
-    die "usage: paramahavcheck directory ingestfile.csv\n";
+    die "usage: paramahavcheck [-d] directory ingestfile.csv\n";
 }
 my ($dir, $ingest) = @ARGV;
 if (! -d $dir) {
-    die "$dir is not a directory\n";
+    die "error: $dir is not a directory\n";
 }
 # we will assume that the directory is readable and executable
 # and that the .txt files within are readable
 if (! -r $ingest) {
-    die "cannot open $ingest\n";
+    die "error: cannot open $ingest for reading\n";
 }
 if ($ingest !~ m{[.]csv \z}xms) {
-    die "$ingest is not a .csv file\n";
+    die "error: $ingest is not a .csv file\n";
 }
 
 =comment
@@ -43,6 +47,7 @@ the following headers will be enforced when examining the ingest.csv file
                ingest.csv.01 etc
     - the ingest.csv file will be edited thusly:
         + missing columns inserted with blank/null entries
+            (unless ... dc.subject.technique)
         + columns reordered if needed
     - if examining the ingest.csv file in a spreadsheet
         becomes unwieldy because of the many empty columns
@@ -115,7 +120,7 @@ my @headers = qw/
 my %valid_header = map { $_ => 1 } @headers;
 
 open my $in, '<:encoding(utf8)', $ingest 
-    or die "cannot open $ingest: $!";
+    or die "error: cannot open $ingest: $!";
 
 my $err = 0;
 use lib '.';
@@ -127,7 +132,7 @@ my %column_for;
 my $i = 0;
 for my $h (@$first_header_aref) {
     if (! exists $valid_header{$h}) {
-        print "invalid header: $h\n";
+        print "error: invalid header: $h\n";
         ++$err;
     }
     $column_for{$h} = $i;
@@ -140,7 +145,7 @@ for my $h (@headers) {
     }
 }
 if (exists $empty_col{'dc.title.alternate'}) {
-    print "no 'dc.title.alternate' header\n";
+    print "error: no 'dc.title.alternate' header\n";
     ++$err;
 }
 if ($err) {
@@ -148,7 +153,7 @@ if ($err) {
 }
 if ($debug) {
     for my $er (sort keys %empty_col) {
-        print "empty: $er\n";
+        print "missing header: $er\n";
     }
 }
 my %ingest_fnames;
@@ -162,20 +167,23 @@ while (my $aref = $csv->getline($in)) {
     }
     my $f = $value_of{'dc.title.alternate'};
     $f =~ s{[.][a-z]+ \z}{}xms;     # trim any suffix
+    if ($debug) {
+        print "$f\n";
+    }
     $ingest_fnames{$f} = 1;
 }
 my @files = <$dir/*>;
 FILE:
 for my $f (@files) {
     if ($f !~ m{ [.]txt\z }xms) {
-        print "$f is not a .txt file!\n";
+        print "error: $f is not a .txt file!\n";
         ++$err;
         next FILE;
     }
     my $f2 = $f;
     $f2 =~ s{\A $dir/(.*)[.]txt \z}{$1}xms;
     if (! $ingest_fnames{$f2}) {
-        print "no line for $f2 in $ingest!\n";
+        print "error: no line for $f2 in $ingest!\n";
         ++$err;
     }
 }
@@ -190,14 +198,18 @@ use Fcntl qw/
 /;
 seek $in, 0, SEEK_SET;
 
+# open the output file.
+# we will rename it.
+# and make a backup of the original ingest file.
+#
 my $ingest_outfile = $ingest . '_out';
 open my $out, '>:encoding(utf8)', $ingest_outfile
-    or die "cannot create $ingest_outfile: $!\n";
+    or die "error: cannot create $ingest_outfile: $!\n";
 
 $first_header_aref = $csv->getline($in);    # get header line
 
-$csv->say($out, \@headers);          # print full header line
-                                            # including empty columns
+$csv->say($out, \@headers);          # print full complete header line
+                                     # including any empty columns
 # subsequent lines:
 while (my $aref = $csv->getline($in)) {
     # again convert array ref to a hash with key of column header
@@ -207,10 +219,24 @@ while (my $aref = $csv->getline($in)) {
             $value_of{$h} = $aref->[$column_for{$h}];
         }
     }
+
+    my $f = "$dir/$value_of{'dc.title.alternate'}";
+    $f =~ s{[.][a-z]+ \z}{}xms;     # trim suffix
+    my $txt = "$f.txt";             # add .txt
+    if (-e $txt) {
+        print "process $txt\n";
+        $value_of{'dc.subject.keyword'} = "keywords from $txt";
+        $value_of{'dc.subject.person'} = "persons from $txt";
+        $value_of{'dc.subject.technique'} = "techniques from $txt";
+        $value_of{'dc.subject.other'} = "other from $txt";
+    }
+    else {
+        print "skipping: NO $txt\n";
+    }
     # the values in @header order:
     my @arr;
     for my $h (@headers) {
-        if ($empty_col{$h}) {
+        if ($empty_col{$h} && ! exists $value_of{$h}) {
             push @arr, '';
         }
         else {

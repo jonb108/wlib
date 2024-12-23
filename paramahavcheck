@@ -52,6 +52,7 @@ the following headers will be enforced when examining the ingest.csv file
     - if examining the ingest.csv file in a spreadsheet
         becomes unwieldy because of the many empty columns
         they can be *hidden*.
+    - empty columns will be deleted in a separate pass
 
 any non .txt files in the directory cause a fatal error
 the .txt files in the directory are examined
@@ -75,11 +76,20 @@ should be mapped to these columns:
     dc.subject.other
         Column E  (variations of keyword, person, techniques) 
 
+add all headers in order
+    but then remove a column entirely if there
+    is no data at all in any of the rows.
+
 'new' and 'discarded' words are added to master lists
     named new.csv and discarded.csv with two columns:
     word, "file1.txt, file2.txt, ..."
         ordered alphabetically, unduplicated files
             so can run it twice with no further effect (idempotent)
+    and save backups of original
+    these two files will be edited MANUALLY as well
+        adding words to vocabulary (from new.txt)
+        adding words to excluded (from discard.txt)
+        and removing them from new.txt or discarded.txt
 
 =cut 
 
@@ -243,6 +253,7 @@ seek $in, 0, SEEK_SET;
 my $ingest_outfile = $ingest . '_out';
 open my $out, '>:encoding(utf8)', $ingest_outfile
     or die "error: cannot create $ingest_outfile: $!\n";
+my %full_header;
 
 $first_header_aref = $csv->getline($in);    # get header line
 
@@ -273,23 +284,44 @@ while (my $aref = $csv->getline($in)) {
     }
     # the values in @header order:
     my @arr;
+    my $j = 0;
     for my $h (@headers) {
         if ($missing_header{$h} && ! exists $value_of{$h}) {
             push @arr, '';
         }
         else {
+            if ($value_of{$h} =~ m{\S}xms) {
+                $full_header{$j} = 1;
+            }
             push @arr, $value_of{$h};
         }
+        ++$j;
     }
     $csv->say($out, \@arr);
 }
 close $in;
 close $out;
 
+# rewrite the $ingest_outfile
+# skipping all columns in keys %full_header
+# with an array slice.
+my @full_cols = sort { $a <=> $b } keys %full_header;
+open my $in2, '<:encoding(utf8)', $ingest_outfile
+    or die "cannot open $ingest_outfile: $!\n";
+my $ingest_outfile2 = $ingest_outfile . '2';
+open my $out2, '>:encoding(utf8)', $ingest_outfile2
+    or die "error: cannot create $ingest_outfile2: $!\n";
+while (my $aref = $csv->getline($in2)) {
+    $csv->say($out2, [ @$aref[ @full_cols ] ] );     # yes
+}
+close $in2;
+close $out2;
+
 # renamings
 my $x = 0;
 while (-e ($ingest . ".$x")) {
     ++$x;
 }
-rename $ingest, $ingest . ".$x";
-rename $ingest_outfile, $ingest;
+rename $ingest, $ingest . ".$x";    # create the backup
+unlink $ingest_outfile;             # remove intermediate file
+rename $ingest_outfile2, $ingest;   # rename final to original

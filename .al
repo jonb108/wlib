@@ -1,4 +1,5 @@
-alias e='vi mahavcheck'
+alias em='vi mahavcheck'
 alias x='mahavcheck test_files'
 alias e='vi paramahavcheck'
 alias x='./paramahavcheck'
+alias ck='perl -c paramahavcheck'

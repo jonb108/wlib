@@ -1,0 +1,231 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+my $debug = 1;
+
+if (@ARGV != 2) {
+    die "usage: paramahavcheck directory ingestfile.csv\n";
+}
+my ($dir, $ingest) = @ARGV;
+if (! -d $dir) {
+    die "$dir is not a directory\n";
+}
+# we will assume that the directory is readable and executable
+# and that the .txt files within are readable
+if (! -r $ingest) {
+    die "cannot open $ingest\n";
+}
+if ($ingest !~ m{[.]csv \z}xms) {
+    die "$ingest is not a .csv file\n";
+}
+
+=comment
+
+id identifier dc.identifier?
+aside from id and collection
+the rest are dc. in alphabetical order
+    except for
+        dc.subject.other     coming after
+        dc.subject.technique instead of coming after
+        dc.subject.keyword
+
+dc.subject     or
+dc.subject.lcc or
+dc.subject.lcsh  ?
+    library of congress classification number (lcc)
+    library of congress subject heading (lcsh)
+
+the following headers will be enforced when examining the ingest.csv file
+    - fatal errors are thrown if an unknown header is encountered
+    - the ingest.csv file will be edited "in-place"
+        and an ingest.csv.00 file will preserve the original
+               ingest.csv.01 etc
+    - the ingest.csv file will be edited thusly:
+        + missing columns inserted with blank/null entries
+        + columns reordered if needed
+    - if examining the ingest.csv file in a spreadsheet
+        becomes unwieldy because of the many empty columns
+        they can be *hidden*.
+
+any non .txt files in the directory cause a fatal error
+the .txt files in the directory are examined
+    and the basename (strip the .txt suffix) must appear in the
+    ingest file as dc.title.alternate (sans suffix)
+    otherwise fatal error
+
+if no fatal errors the processing of the .txt
+    files will proceed
+
+output from the ParaMahaVCheck perusing of the .txt files
+should be mapped to these columns:
+    dc.subject.keyword
+        Column B of the MahaVcheck output file
+        with all the "Official" Vocabulary words
+        found in the document
+    dc.subject.person
+        Column C - person names in the document
+    dc.subject.technique
+        Column D - techniques in the document
+    dc.subject.other
+        Column E  (variations of keyword, person, techniques) 
+
+'new' and 'discarded' words are added to master lists
+    named new.csv and discarded.csv with two columns:
+    word, "file1.txt, file2.txt, ..."
+        ordered alphabetically, unduplicated files
+            so can run it twice with no further effect (idempotent)
+
+=cut 
+
+my @headers = qw/
+    id
+    collection
+    dc.contributor
+    dc.contributor.author
+    dc.coverage
+    dc.creator
+    dc.date.accessioned
+    dc.date.available
+    dc.date.created
+    dc.date.submitted
+    dc.description
+    dc.description.provenance
+    dc.format.extent
+    dc.format.medium
+    dc.identifier.uri
+    dc.identifier.externalURI
+    dc.language.iso
+    dc.relation
+    dc.relation.ispartof
+    dc.relation.ispartofseries
+    dc.rights
+    dc.rights.holder
+    dc.rights.license
+    dc.rights.uri
+    dc.subject
+    dc.subject.lcsh
+    dc.subject.keyword
+    dc.subject.person
+    dc.subject.technique
+    dc.subject.other
+    dc.title
+    dc.title.alternate
+/;
+my %valid_header = map { $_ => 1 } @headers;
+
+open my $in, '<:encoding(utf8)', $ingest 
+    or die "cannot open $ingest: $!";
+
+my $err = 0;
+use lib '.';
+use Text::CSV_PP;
+my $csv = Text::CSV_PP->new({ binary => 1, auto_diag => 1});
+
+my $first_header_aref = $csv->getline($in);
+my %column_for;
+my $i = 0;
+for my $h (@$first_header_aref) {
+    if (! exists $valid_header{$h}) {
+        print "invalid header: $h\n";
+        ++$err;
+    }
+    $column_for{$h} = $i;
+    ++$i;
+}
+my %empty_col;
+for my $h (@headers) {
+    if (! exists $column_for{$h}) {
+        $empty_col{$h} = 1;
+    }
+}
+if (exists $empty_col{'dc.title.alternate'}) {
+    print "no 'dc.title.alternate' header\n";
+    ++$err;
+}
+if ($err) {
+    exit;
+}
+if ($debug) {
+    for my $er (sort keys %empty_col) {
+        print "empty: $er\n";
+    }
+}
+my %ingest_fnames;
+while (my $aref = $csv->getline($in)) {
+    # convert array ref to a hash with key of column header
+    my %value_of;
+    for my $h (@headers) {
+        if (! exists $empty_col{$h}) {
+            $value_of{$h} = $aref->[$column_for{$h}];
+        }
+    }
+    my $f = $value_of{'dc.title.alternate'};
+    $f =~ s{[.][a-z]+ \z}{}xms;     # trim any suffix
+    $ingest_fnames{$f} = 1;
+}
+my @files = <$dir/*>;
+FILE:
+for my $f (@files) {
+    if ($f !~ m{ [.]txt\z }xms) {
+        print "$f is not a .txt file!\n";
+        ++$err;
+        next FILE;
+    }
+    my $f2 = $f;
+    $f2 =~ s{\A $dir/(.*)[.]txt \z}{$1}xms;
+    if (! $ingest_fnames{$f2}) {
+        print "no line for $f2 in $ingest!\n";
+        ++$err;
+    }
+}
+if ($err) {
+    exit;
+}
+
+# okay.  no fatal errors.
+# let's rewind the ingest.csv file and proceed
+use Fcntl qw/
+    SEEK_SET
+/;
+seek $in, 0, SEEK_SET;
+
+my $ingest_outfile = $ingest . '_out';
+open my $out, '>:encoding(utf8)', $ingest_outfile
+    or die "cannot create $ingest_outfile: $!\n";
+
+$first_header_aref = $csv->getline($in);    # get header line
+
+$csv->say($out, \@headers);          # print full header line
+                                            # including empty columns
+# subsequent lines:
+while (my $aref = $csv->getline($in)) {
+    # again convert array ref to a hash with key of column header
+    my %value_of;
+    for my $h (@headers) {
+        if (! exists $empty_col{$h}) {
+            $value_of{$h} = $aref->[$column_for{$h}];
+        }
+    }
+    # the values in @header order:
+    my @arr;
+    for my $h (@headers) {
+        if ($empty_col{$h}) {
+            push @arr, '';
+        }
+        else {
+            push @arr, $value_of{$h};
+        }
+    }
+    $csv->say($out, \@arr);
+}
+close $in;
+close $out;
+
+# renamings
+my $x = 0;
+while (-e ($ingest . ".$x")) {
+    ++$x;
+}
+rename $ingest, $ingest . ".$x";
+rename $ingest_outfile, $ingest;

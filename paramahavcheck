@@ -83,6 +83,8 @@ should be mapped to these columns:
 
 =cut 
 
+# ? dc.contributor.other?
+# before ingestion - manually delete columns with no data???
 my @headers = qw/
     id
     collection
@@ -117,6 +119,26 @@ my @headers = qw/
     dc.title
     dc.title.alternate
 /;
+# these headers must have a non-blank answer
+my @required = qw/
+    id
+    collection
+    dc.coverage
+    dc.creator
+    dc.date.created
+    dc.description
+    dc.format.medium
+    dc.language.iso
+    dc.rights
+    dc.rights.holder
+    dc.rights.license
+    dc.rights.uri
+    dc.subject
+    dc.title
+    dc.title.alternate
+/;
+# dc.date.created must be dddd-dd-dd
+
 my %valid_header = map { $_ => 1 } @headers;
 
 open my $in, '<:encoding(utf8)', $ingest 
@@ -138,13 +160,13 @@ for my $h (@$first_header_aref) {
     $column_for{$h} = $i;
     ++$i;
 }
-my %empty_col;
+my %missing_header;
 for my $h (@headers) {
     if (! exists $column_for{$h}) {
-        $empty_col{$h} = 1;
+        $missing_header{$h} = 1;
     }
 }
-if (exists $empty_col{'dc.title.alternate'}) {
+if (exists $missing_header{'dc.title.alternate'}) {
     print "error: no 'dc.title.alternate' header\n";
     ++$err;
 }
@@ -152,16 +174,20 @@ if ($err) {
     exit;
 }
 if ($debug) {
-    for my $er (sort keys %empty_col) {
+    for my $er (sort keys %missing_header) {
         print "missing header: $er\n";
     }
 }
+#
+# gather the files in the ingest file
+# and do some checking of date format, required fields, etc
+#
 my %ingest_fnames;
 while (my $aref = $csv->getline($in)) {
     # convert array ref to a hash with key of column header
     my %value_of;
     for my $h (@headers) {
-        if (! exists $empty_col{$h}) {
+        if (! exists $missing_header{$h}) {
             $value_of{$h} = $aref->[$column_for{$h}];
         }
     }
@@ -171,6 +197,18 @@ while (my $aref = $csv->getline($in)) {
         print "$f\n";
     }
     $ingest_fnames{$f} = 1;
+    for my $r (@required) {
+        if ($value_of{$r} !~ m{\S}xms) {
+            print "error: missing required value: '$r' for $f\n";
+            ++$err;
+        }
+    }
+    my $dt = $value_of{'dc.date.created'};
+    if ($dt && $dt !~ m{\A \d\d\d\d-\d\d-\d\d \z}xms) {
+        # check for valid date?  nah.
+        print "error: invalid 'dc.date.created': $dt for $f\n";
+        ++$err;
+    }
 }
 my @files = <$dir/*>;
 FILE:
@@ -215,7 +253,7 @@ while (my $aref = $csv->getline($in)) {
     # again convert array ref to a hash with key of column header
     my %value_of;
     for my $h (@headers) {
-        if (! exists $empty_col{$h}) {
+        if (! exists $missing_header{$h}) {
             $value_of{$h} = $aref->[$column_for{$h}];
         }
     }
@@ -236,7 +274,7 @@ while (my $aref = $csv->getline($in)) {
     # the values in @header order:
     my @arr;
     for my $h (@headers) {
-        if ($empty_col{$h} && ! exists $value_of{$h}) {
+        if ($missing_header{$h} && ! exists $value_of{$h}) {
             push @arr, '';
         }
         else {

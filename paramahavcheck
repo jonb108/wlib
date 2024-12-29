@@ -1,6 +1,20 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use lib '.';
+use Text::CSV_PP;
+use DB_File;
+use open ':std', ':encoding(utf8)';
+use List::Util qw/
+    uniq
+/;
+use Encode qw/
+    encode_utf8
+    decode_utf8
+/;
+use Fcntl qw/
+    SEEK_SET
+/;
 
 my $debug = 0;
 if (@ARGV && $ARGV[0] eq '-d') {
@@ -60,6 +74,8 @@ the .txt files in the directory are examined
     ingest file as dc.title.alternate (sans suffix)
     otherwise fatal error
 
+.txt files cannot have a comma in the name
+
 if no fatal errors the processing of the .txt
     files will proceed
 
@@ -82,19 +98,20 @@ add all headers in order
 
 'new' and 'discarded' words are added to master lists
     named new.csv and discarded.csv with two columns:
-    word, "file1.txt, file2.txt, ..."
+    header:
+        word,filenames
+    word,"file1.txt, file2.txt, ..."
         ordered alphabetically, unduplicated files
             so can run it twice with no further effect (idempotent)
     and save backups of original
     these two files will be edited MANUALLY as well
-        adding words to vocabulary (from new.txt)
-        adding words to excluded (from discard.txt)
-        and removing them from new.txt or discarded.txt
+        adding words to vocabulary (from new.csv)
+        adding words to excluded (from discard.csv)
+        and removing them from new.csv or discarded.csv
 
 =cut 
 
 # ? dc.contributor.other?
-# before ingestion - manually delete columns with no data???
 my @headers = qw/
     id
     collection
@@ -155,8 +172,6 @@ open my $in, '<:encoding(utf8)', $ingest
     or die "error: cannot open $ingest: $!";
 
 my $err = 0;
-use lib '.';
-use Text::CSV_PP;
 my $csv = Text::CSV_PP->new({ binary => 1, auto_diag => 1});
 
 my $first_header_aref = $csv->getline($in);
@@ -228,6 +243,11 @@ for my $f (@files) {
         ++$err;
         next FILE;
     }
+    if ($f =~ m{,}xms) {
+        print "error: the name $f contains a comma!\n";
+        ++$err;
+        next FILE;
+    }
     my $f2 = $f;
     $f2 =~ s{\A $dir/(.*)[.]txt \z}{$1}xms;
     if (! $ingest_fnames{$f2}) {
@@ -238,12 +258,257 @@ for my $f (@files) {
 if ($err) {
     exit;
 }
-
 # okay.  no fatal errors.
+
+# set everything up for processing the .txt files
+# 6 DBM files
+my (%vocab, %names, %techniques, %alternates, %lex, %excluded);
+tie %vocab,      'DB_File', 'vocab.dbm';
+tie %alternates, 'DB_File', 'alternates.dbm';
+tie %names,      'DB_File', 'names.dbm';
+tie %techniques, 'DB_File', 'techniques.dbm';
+tie %lex,        'DB_File', 'lex.dbm';
+tie %excluded,   'DB_File', 'excluded.dbm';
+
+# 3 text files for space regexes
+my @vocab_sp      = get_sp('vocab_sp.txt');
+my @names_sp      = get_sp('names_sp.txt');
+my @techniques_sp = get_sp('techniques_sp.txt');
+
+# a file of Harvard-Kyoto and iTRANS words with 
+# an initial capital letter.  make a lookup table.
+my %caps;
+open my $caps, '<', 'caps.txt'
+    or die "no caps.txt: $!\n";
+while (my $line = <$caps>) {
+    chomp $line;
+    $caps{$line} = 1;
+}
+close $caps;
+
+sub get_sp {
+    my ($fname) = @_;
+    open my $in, '<', $fname or die "no $fname: $!\n";
+    my @array = <$in>;
+    close $in;
+    chomp @array;
+    return @array;
+}
+
+=comment
+
+the new and discard word files
+new.csv and discard.csv have this header line:
+    "word",filenames
+
+we read them into hashes; for each
+    the key is the word
+    the value is comma separated list
+        of .txt files containing the word
+
+when we're done we write the hashes back
+to the .csv files (while keeping a backup ...)
+unduping and sorting the list of files
+
+=cut
+
+my (%new_words, %disc_words);
+get_csv('new.csv',     \%new_words);
+get_csv('discard.csv', \%disc_words);
+sub get_csv {
+    my ($fname, $href) = @_;
+    open my $in, '<:encoding(utf8)', $fname
+        or return;  # file doesn't exist yet
+    my $head_aref = $csv->getline($in);     # header
+    while (my $aref = $csv->getline($in)) {
+        push @{$href->{$aref->[0]}}, split m{\s*,\s*}, $aref->[1];
+            # tricky!
+    }
+    close $in;
+}
+sub put_csv {
+    my ($fname, $href) = @_;
+    my $tmp_fname = "$fname.tmp";
+    open my $out, '>:encoding(utf8)', $tmp_fname
+        or die "cannot open $tmp_fname: $!\n";
+    $csv->say($out, [qw/ word filenames /]);    # header
+    for my $w (sort keys %$href) {
+        $csv->say($out, [ $w, join(', ', uniq sort @{$href->{$w}}) ]);
+    }
+    close $out;
+    my $x = 0;
+    while (-e ($fname . ".$x")) {
+        ++$x;
+    }
+    rename $fname, $fname . ".$x";
+    rename $tmp_fname, $fname;
+}
+sub add_word {
+    my ($w, $fname, $href) = @_;
+    push @{$href->{$w}}, $fname;
+}
+
+# variables to communicate from sub process to the loop below
+# sort of a hack...
+my ($dcs_keyword, $dcs_person, $dcs_technique, $dcs_other);
+
+# decode_utf8, join, uniq, sort, split
+sub fix {
+    my ($sep, @words) = @_;
+    my @arr;
+    for my $w (@words) {
+        push @arr, split m{\Q$sep\E}xms, $w;
+    }
+    return decode_utf8(join $sep, uniq sort @arr);
+}
+
+sub process {
+    my ($fname) = @_;
+    open my $in, '<:encoding(utf8)', $fname
+        or die "cannot open $fname: $!\n";
+    my $no_dir_fname = $fname;
+    $no_dir_fname =~ s{\A $dir/}{}xms;
+    print "processing $no_dir_fname\n";
+
+    my $full_text;
+    {
+        local $/;
+        no warnings;
+        $full_text = <$in>;
+        #$full_text = encode_utf8($full_text);
+        close $in;
+    }
+    # \pL is the unicode character class for 'letters'.
+    # see perldoc perlunicode.
+    # we look for words with at least 2 letters with
+    # a possible ' or - in the middle.
+    #
+    my @words = $full_text =~ m!(\p{Letter}[\p{Letter}'’-]*\p{Letter})!xmsg; 
+    if ($debug) {
+        print "1: $fname: @words\n"; <STDIN>;
+    }
+
+    # what about single letter words like I or a??
+    # ignored??
+ 
+    # words that *begin* with a capital letter
+    # should have that letter lowercased.
+    # do not do this if a word is in the caps.txt file.
+    #
+    # this initial capital letter will mostly be A-Z but
+    # maybe also the upper case diacritic'ed letters
+    # like Ācāra => ācāra or śhabda => Śhabda
+    #
+    for my $w (@words) {
+        $w =~ s{’s}{}xmsg;                  # Lakshmi’s
+        $w =~ s{[\p{^Letter}…] \z}{}xmsg;   # terminal non-Letter - plus …
+        if (! exists $caps{$w} && $w =~ m{\A \p{Lu}}xms) {
+            $w =~ s{\A (\p{Lu}) }{lc $1}xmse;
+        }
+    }
+
+    @words = uniq sort @words;
+
+    if ($debug) {
+        print "2: $fname: @words\n"; <STDIN>;
+    }
+
+    my @eng_san_words;
+    my @name_words;
+    my @technique_words;
+    my @alt_words;
+    WORD:
+    for my $w (@words) {
+        my $ew = encode_utf8($w);
+        if (exists $names{$ew}) {
+            my $x = $names{$ew};
+            push @name_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+        elsif (exists $techniques{$ew}) {
+            my $x = $techniques{$ew};
+            push @technique_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+            push @alt_words, $alternates{$x};
+        }
+        elsif (exists $vocab{$ew}) {
+            my $x = $vocab{$ew};
+            push @eng_san_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+        else {
+            # shall we include it in the new words list?
+            # or toss it into the discard list
+            if (exists $excluded{$ew}) {
+                add_word($w, $no_dir_fname, \%disc_words);
+            }
+            elsif ($lex{$ew}) {
+                add_word($w, $no_dir_fname, \%new_words);
+            }
+            elsif ($w =~ m{ly \z}xms) {
+                my $x = $w;
+                $x =~ s{ly \z}{}xms;
+                if ($lex{$x}) {
+                    add_word($w, $no_dir_fname, \%new_words);
+                }
+                else {
+                    add_word($w, $no_dir_fname, \%disc_words);
+                }
+            }
+            else {
+                add_word($w, $no_dir_fname, \%disc_words);
+            }
+        }
+    }
+    # now for the 3 sets of regex space words
+    for my $w (@vocab_sp) {
+        my $sp = $w;
+        $sp =~ s{\s+}{\\s+}xmsg;
+        if ($full_text =~ m{$sp}xms) {
+            my $x = $vocab{$w};
+            push @eng_san_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+    }
+    for my $w (@names_sp) {
+        my $sp = $w;
+        $sp =~ s{\s+}{\\s+}xmsg;
+        if ($full_text =~ m{$sp}xms) {
+            my $x = $names{$w};
+            push @name_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+    }
+    for my $w (@techniques_sp) {
+        my $ew = encode_utf8($w);
+        my $sp = $w;
+        $sp =~ s{\s+}{\\s+}xmsg;
+        if ($full_text =~ m{$sp}xms) {
+            my $x = $techniques{$ew};
+            push @technique_words, $x;
+            if (exists $alternates{$x}) {
+                push @alt_words, $alternates{$x};
+            }
+        }
+    }
+    $dcs_keyword   = fix('||', @eng_san_words);
+    $dcs_person    = fix('||', @name_words);
+    $dcs_technique = fix('||', @technique_words);
+    $dcs_other     = fix('||', @alt_words);
+}
+
+
 # let's rewind the ingest.csv file and proceed
-use Fcntl qw/
-    SEEK_SET
-/;
 seek $in, 0, SEEK_SET;
 
 # open the output file.
@@ -273,11 +538,11 @@ while (my $aref = $csv->getline($in)) {
     $f =~ s{[.][a-z]+ \z}{}xms;     # trim suffix
     my $txt = "$f.txt";             # add .txt
     if (-e $txt) {
-        print "process $txt\n";
-        $value_of{'dc.subject.keyword'} = "keywords from $txt";
-        $value_of{'dc.subject.person'} = "persons from $txt";
-        $value_of{'dc.subject.technique'} = "techniques from $txt";
-        $value_of{'dc.subject.other'} = "other from $txt";
+        process($txt);      # most of the work...
+        $value_of{'dc.subject.keyword'}   = $dcs_keyword;
+        $value_of{'dc.subject.person'}    = $dcs_person;
+        $value_of{'dc.subject.technique'} = $dcs_technique;
+        $value_of{'dc.subject.other'}     = $dcs_other;
     }
     else {
         print "skipping: NO $txt\n";
@@ -302,9 +567,14 @@ while (my $aref = $csv->getline($in)) {
 close $in;
 close $out;
 
+# deal with %new_words and %discard_words
+# write them back to .csv files keeping a backup...
+put_csv('new.csv',  \%new_words);
+put_csv('disc.csv', \%disc_words);
+
 # rewrite the $ingest_outfile
-# skipping all columns in keys %full_header
-# with an array slice.
+# skipping all columns except those in keys %full_header
+# by using an array slice.
 my @full_cols = sort { $a <=> $b } keys %full_header;
 open my $in2, '<:encoding(utf8)', $ingest_outfile
     or die "cannot open $ingest_outfile: $!\n";

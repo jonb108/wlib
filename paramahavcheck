@@ -570,7 +570,7 @@ close $out;
 # deal with %new_words and %discard_words
 # write them back to .csv files keeping a backup...
 put_csv('new.csv',  \%new_words);
-put_csv('disc.csv', \%disc_words);
+put_csv('discard.csv', \%disc_words);
 
 # rewrite the $ingest_outfile
 # skipping all columns except those in keys %full_header

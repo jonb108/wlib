@@ -23,7 +23,7 @@ if (@ARGV && $ARGV[0] eq '-d') {
 }
 
 if (@ARGV != 2) {
-    die "usage: paramahavcheck [-d] directory ingestfile.csv\n";
+    die "usage: paramahavcheck directory ingestfile.csv\n";
 }
 my ($dir, $ingest) = @ARGV;
 if (! -d $dir) {

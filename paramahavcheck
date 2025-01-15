@@ -71,7 +71,7 @@ the following headers will be enforced when examining the ingest.csv file
 any non .txt files in the directory cause a fatal error
 the .txt files in the directory are examined
     and the basename (strip the .txt suffix) must appear in the
-    ingest file as dc.title.alternate (sans suffix)
+    ingest file as dc.title (sans suffix)
     otherwise fatal error
 
 .txt files cannot have a comma in the name
@@ -141,7 +141,7 @@ my @headers = qw/
     dc.subject.lcsh
     dc.subject.keyword
     dc.subject.person
-    dc.subject.technique
+    dc.subject.techniques
     dc.subject.other
     dc.title
     dc.title.alternate
@@ -191,8 +191,8 @@ for my $h (@headers) {
         $missing_header{$h} = 1;
     }
 }
-if (exists $missing_header{'dc.title.alternate'}) {
-    print "error: no 'dc.title.alternate' header\n";
+if (exists $missing_header{'dc.title'}) {
+    print "error: no 'dc.title' header\n";
     ++$err;
 }
 if ($err) {
@@ -216,7 +216,7 @@ while (my $aref = $csv->getline($in)) {
             $value_of{$h} = $aref->[$column_for{$h}];
         }
     }
-    my $f = $value_of{'dc.title.alternate'};
+    my $f = $value_of{'dc.title'};
     $f =~ s{[.][a-z]+ \z}{}xms;     # trim any suffix
     if ($debug) {
         print "$f\n";
@@ -471,7 +471,8 @@ sub process {
         my $sp = $w;
         $sp =~ s{\s+}{\\s+}xmsg;
         if ($full_text =~ m{$sp}xms) {
-            my $x = $vocab{$w};
+            my $ew = encode_utf8($w);
+            my $x = $vocab{$ew};
             push @eng_san_words, $x;
             if (exists $alternates{$x}) {
                 push @alt_words, $alternates{$x};
@@ -482,7 +483,8 @@ sub process {
         my $sp = $w;
         $sp =~ s{\s+}{\\s+}xmsg;
         if ($full_text =~ m{$sp}xms) {
-            my $x = $names{$w};
+            my $ew = encode_utf8($w);
+            my $x = $names{$ew};
             push @name_words, $x;
             if (exists $alternates{$x}) {
                 push @alt_words, $alternates{$x};
@@ -534,7 +536,7 @@ while (my $aref = $csv->getline($in)) {
         }
     }
 
-    my $f = "$dir/$value_of{'dc.title.alternate'}";
+    my $f = "$dir/$value_of{'dc.title'}";
     $f =~ s{[.][a-z]+ \z}{}xms;     # trim suffix
     my $txt = "$f.txt";             # add .txt
     if (-e $txt) {

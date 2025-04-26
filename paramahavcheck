@@ -97,10 +97,10 @@ add all headers in order
     is no data at all in any of the rows.
 
 'new' and 'discarded' words are added to master lists
-    named new.csv and discarded.csv with two columns:
+    named new.csv and discarded.csv with three columns:
     header:
-        word,filenames
-    word,"file1.txt, file2.txt, ..."
+        word,nfiles,filenames
+    word,nfiles,"file1.txt, file2.txt, ..."
         ordered alphabetically, unduplicated files
             so can run it twice with no further effect (idempotent)
     and save backups of original
@@ -110,6 +110,8 @@ add all headers in order
         and removing them from new.csv or discarded.csv
 
 =cut 
+
+mkdir "backups" unless -d "backups";
 
 # ? dc.contributor.other?
 my @headers = qw/
@@ -299,7 +301,7 @@ sub get_sp {
 
 the new and discard word files
 new.csv and discard.csv have this header line:
-    "word",filenames
+    "word",nfiles,filenames
 
 we read them into hashes; for each
     the key is the word
@@ -321,7 +323,8 @@ sub get_csv {
         or return;  # file doesn't exist yet
     my $head_aref = $csv->getline($in);     # header
     while (my $aref = $csv->getline($in)) {
-        push @{$href->{$aref->[0]}}, split m{\s*,\s*}, $aref->[1];
+        my $fcol = (@$aref == 2)? 1: 2;     # tmp??
+        push @{$href->{$aref->[0]}}, split m{\s*,\s*}, $aref->[$fcol];
             # tricky!
     }
     close $in;
@@ -331,16 +334,18 @@ sub put_csv {
     my $tmp_fname = "$fname.tmp";
     open my $out, '>:encoding(utf8)', $tmp_fname
         or die "cannot open $tmp_fname: $!\n";
-    $csv->say($out, [qw/ word filenames /]);    # header
+    $csv->say($out, [qw/ word nfiles filenames /]);    # header
     for my $w (sort keys %$href) {
-        $csv->say($out, [ $w, join(', ', uniq sort @{$href->{$w}}) ]);
+        my @files = uniq sort @{$href->{$w}};
+        $csv->say($out, [ $w, scalar(@files), join(', ', @files) ]);
     }
     close $out;
     my $x = 0;
-    while (-e ($fname . ".$x")) {
+    my $back_fname = "backups/$fname";
+    while (-e ($back_fname . ".$x")) {
         ++$x;
     }
-    rename $fname, $fname . ".$x";
+    rename $fname, $back_fname . ".$x";
     rename $tmp_fname, $fname;
 }
 sub add_word {
@@ -356,7 +361,11 @@ my ($dcs_keyword, $dcs_person, $dcs_technique, $dcs_other);
 sub fix {
     my ($sep, @words) = @_;
     my @arr;
+    WORD:
     for my $w (@words) {
+        if (! $w) {
+            next WORD;
+        }
         push @arr, split m{\Q$sep\E}xms, $w;
     }
     return decode_utf8(join $sep, uniq sort @arr);
@@ -591,9 +600,10 @@ close $out2;
 
 # renamings
 my $x = 0;
-while (-e ($ingest . ".$x")) {
+my $back_ingest = "backups/$ingest";
+while (-e ($back_ingest . ".$x")) {
     ++$x;
 }
-rename $ingest, $ingest . ".$x";    # create the backup
+rename $ingest, $back_ingest . ".$x";    # create the backup
 unlink $ingest_outfile;             # remove intermediate file
 rename $ingest_outfile2, $ingest;   # rename final to original

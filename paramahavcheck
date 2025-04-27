@@ -341,11 +341,10 @@ sub put_csv {
     }
     close $out;
     my $x = 0;
-    my $back_fname = "backups/$fname";
-    while (-e ($back_fname . ".$x")) {
+    while (-e "backups/$x.$fname") {
         ++$x;
     }
-    rename $fname, $back_fname . ".$x";
+    rename $fname, "backups/$x.$fname";
     rename $tmp_fname, $fname;
 }
 sub add_word {
@@ -600,10 +599,9 @@ close $out2;
 
 # renamings
 my $x = 0;
-my $back_ingest = "backups/$ingest";
-while (-e ($back_ingest . ".$x")) {
+while (-e ("backups/$x.$ingest")) {
     ++$x;
 }
-rename $ingest, $back_ingest . ".$x";    # create the backup
+rename $ingest, "backups/$x.$ingest";    # create the backup
 unlink $ingest_outfile;             # remove intermediate file
 rename $ingest_outfile2, $ingest;   # rename final to original

@@ -1,4 +1,4 @@
-when versioning put the .0 thing in FRONT of the .csv
+when versioning put the .0 thing in FRONT of the .csv filename
     and put in a subdirectory named 'backups'
 add number of files in a new column B
     in the discard.csv and new.csv

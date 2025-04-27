@@ -6,7 +6,7 @@ use DB_File;
 unlink 'lex.dbm';
 my %lex;
 tie %lex, 'DB_File', 'lex.dbm';
-open my $in, '<', 'biglex.txt';
+open my $in, '<', 'biglex.txt' or die "no biglex.txt";
 while (my $word = <$in>) {
     chomp $word;
     $lex{$word} = 1; 

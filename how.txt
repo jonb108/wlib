@@ -105,11 +105,12 @@ the .dbm files can be viewed with:
 
 ========
 
-% mahavcheck dirname
+% paramahavcheck dirname ingest
 
-mahavcheck has one parameter: a directory name
+paramahavcheck has two parameters: a directory name and an ingest file
 The directory contains .txt files to process.
-There will be two .csv output files: dirname.csv and dirname_new.csv.
+
+the following is out of date... see comment in paramahavcheck
 
 mahavcheck does a lot:
 
@@ -134,10 +135,10 @@ F: discarded words
 
 All words from all .txt files that are
 deemed to be 'new' are sorted alphabetically
-and added to the dirname_new.csv file.   Lines have two
+and added to the new.csv file.   Lines have three
 columns:
 
-word, "file1, file2, ..."
+word, # of files, "file1, file2, ..."
 
 where the word was found in each of the listed filenames (only
     the .txt filename - without the dirname)

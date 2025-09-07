@@ -126,6 +126,7 @@ my @headers = qw/
     dc.date.created
     dc.date.submitted
     dc.description
+    dc.description.disclaimer
     dc.description.provenance
     dc.format.extent
     dc.format.medium

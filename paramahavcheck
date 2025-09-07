@@ -16,6 +16,11 @@ use Fcntl qw/
     SEEK_SET
 /;
 
+my $version = 2.1;
+if (@ARGV && $ARGV[0] eq '-v') {
+    print "$version\n";
+    exit;
+}
 my $debug = 0;
 if (@ARGV && $ARGV[0] eq '-d') {
     shift;

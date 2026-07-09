@@ -1,0 +1,397 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+=commment
+
+TODO:
+    make a module Ingest.pm which has init and %column_for
+    that does the verification of the ingest file for both
+    paramahavcheck and nivritti_lib.
+
+usage: nivritti_lib ingest.csv
+
+the dc.subject.keyword, dc.subject.other,
+    dc.subject.person and dc.subject.techniques
+    columns in the ingest file are double pipe separated list of words.
+
+after rename, mkvocab, and undup_alt and mkexcluded
+in the current directory we have:
+    english.csv
+    sanskrit.csv
+    prohbited.csv
+    names.csv
+    techniques.csv
+
+and the corresponding generated .dbm files:
+    vocab.dbm       (both english and sanskrit)
+    excluded.dbm    (from prohibited.csv by mkexcluded)
+    names.dbm
+    techniques.dbm
+    alternates.dbm
+
+for each word in the dc.subject.keyword column
+    if it is NOT in the english or sanskrit file remove it
+    if IS in the prohibited file remove it
+
+    for all words that remain in the dc.subject.keyword column
+        the dc.subject.other column will get all the variations
+            from the alternates.dbm file
+            sorted alphabetically
+        the original is replaced
+
+for each name in the dc.subject.person column
+    if it does not occur in the names.csv file remove it
+for each technique in the dc.subject.techniques column
+    if it does not occur in the techniques.csv file remove it
+
+removed items will be saved in files named
+    removed_words, removed_names and removed_techniques
+        they have two columns
+    1 - word
+    2 - double piped list of unique
+        dc.title.alternate filenames that they ocurred in
+
+the ingest file is edited 'in place'
+    and the original is put in backups directory
+
+different ingest files may have the
+    dc.subject.keyword and dc.subject.other column
+    in different places
+
+    not all will have dc.subject.person or dc.subject.technique columns
+    leave it in place even if all are removed
+
+we want only one removed .csv file (all_removed.csv) output that accumulates
+    sources.   if a word is already in this file just append the new
+    sources otherwise add a new row for the new word.
+
+    this all_removed.csv file has several columns
+        1 PN capital letter, E English, S Sanskrit
+        2 the word
+        the other columns are the result of each
+            running of nivritti_lib
+        the header is the name of the ingest file (sans the .csv)
+        and the content is the sources (|| separate)
+            where the word was found
+        or blank if it was not found.
+=cut
+
+use lib '.';
+use Text::CSV_PP;
+my $csv = Text::CSV_PP->new({ binary => 1, auto_diag => 1});
+use DB_File;
+use open ':std', ':encoding(utf8)';
+use Encode qw/
+    encode_utf8
+    decode_utf8
+/;
+use List::Util qw/
+    uniq
+/;
+
+my $debug = 0;
+if (@ARGV && $ARGV[0] eq '-d') {
+    $debug = 1;
+    shift;
+}
+mkdir "backups" unless -d "backups";
+
+if (@ARGV != 1) {
+    die "usage: niviritti_lib ingest.csv\n";
+}
+my $ingest = shift;
+if ($ingest !~ m{ [.]csv \z }xms) {
+    die "ingest file: $ingest is not a .csv file\n";
+}
+if (! -r $ingest) {
+    die "ingest file: $ingest is not readable\n";
+}
+
+my $ingest2 = $ingest . '2';
+
+# ? dc.contributor.other?
+my @headers = qw/
+    id
+    collection
+    dc.contributor
+    dc.contributor.author
+    dc.coverage
+    dc.creator
+    dc.date.accessioned
+    dc.date.available
+    dc.date.created
+    dc.date.submitted
+    dc.description
+    dc.description.disclaimer
+    dc.description.provenance
+    dc.format.extent
+    dc.format.medium
+    dc.identifier.uri
+    dc.identifier.externalURI
+    dc.language.iso
+    dc.relation
+    dc.relation.ispartof
+    dc.relation.ispartofseries
+    dc.rights
+    dc.rights.holder
+    dc.rights.license
+    dc.rights.uri
+    dc.subject
+    dc.subject.lcsh
+    dc.subject.keyword
+    dc.subject.person
+    dc.subject.techniques
+    dc.subject.other
+    dc.title
+    dc.title.alternate
+/;
+
+my %valid_header = map { $_ => 1 } @headers;
+
+open my $in, '<:encoding(utf8)', $ingest 
+    or die "error: cannot open $ingest: $!";
+open my $out, '>:encoding(utf8)', $ingest2 
+    or die "error: cannot create $ingest2: $!";
+
+my $first_header_aref = $csv->getline($in);
+$csv->say($out, $first_header_aref);
+
+my %column_for;
+my $i = 0;
+my $err = 0;
+for my $h (@$first_header_aref) {
+    if (! exists $valid_header{$h} && $h !~ m{en_US}xms) {
+        print "error: invalid header: $h\n";
+        ++$err;
+    }
+    $column_for{$h} = $i;
+    ++$i;
+}
+my %missing_header;
+for my $h (@headers) {
+    if (! exists $column_for{$h}) {
+        $missing_header{$h} = 1;
+    }
+}
+if (exists $missing_header{'dc.title'}) {
+    print "error: no 'dc.title' header\n";
+    ++$err;
+}
+if ($err) {
+    close $in;
+    close $out;
+    unlink $ingest2;
+    exit;
+}
+
+for my $h (qw/
+    dc.subject.keyword
+    dc.subject.other
+    dc.subject.person
+    dc.subject.techniques
+    dc.title
+    dc.title.alternate
+/) {
+    print "column for $h: $column_for{$h}\n" if $debug;
+}
+
+my (%lex, %vocab, %names, %techniques, %alternates, %excluded);
+tie %lex,        'DB_File', 'lex.dbm';
+tie %vocab,      'DB_File', 'vocab.dbm';
+tie %names,      'DB_File', 'names.dbm';
+tie %techniques, 'DB_File', 'techniques.dbm';
+tie %alternates, 'DB_File', 'alternates.dbm';
+tie %excluded,   'DB_File', 'excluded.dbm';
+
+my %removed_words;
+my %removed_techniques;
+my %removed_names;
+
+my $n = 1;
+LINE:
+while (my $aref = $csv->getline($in)) {
+    ++$n;
+    my $alt_file = $aref->[$column_for{'dc.title.alternate'}];
+    if ($debug) {
+        print "line $n\n";
+        print "alt_file: $alt_file\n";
+    }
+
+    my @words = split /\|\|/,
+                $aref->[$column_for{'dc.subject.keyword'}];
+    my @alt_words;
+    my @key_words;
+    my $nwords = 0;
+    my $nkeep = 0;
+    for my $w (@words) {
+        ++$nwords;
+        my $ew = encode_utf8($w);
+        if (! exists $vocab{$ew} || exists $excluded{$ew}) {
+            print "remove '$w'\n" if $debug;
+            $removed_words{$ew} .= "$alt_file||";
+        }
+        else {
+            ++$nkeep;
+            print "keep '$w'\n" if $debug;
+            push @key_words, $ew;
+            my $alt = $alternates{$ew};
+            print "alt: " . decode_utf8($alt) . "\n" if $debug;
+            push @alt_words, $alt;
+        }
+    }
+    if ($debug) {
+        print "line $n $nwords words, $nkeep keep\n";
+        <STDIN>;
+        print 'SUBJECT.KEY: ' . fix('||', @key_words) . "\n\n";
+    }
+
+    $aref->[$column_for{'dc.subject.keyword'}] = fix('||', @key_words);
+
+    if ($debug) {
+        <STDIN>;
+        print 'SUBJECT.OTHER: ' . fix('||', @alt_words) . "\n\n";
+    }
+
+    $aref->[$column_for{'dc.subject.other'}] = fix('||', @alt_words);
+
+    if ($debug) {
+        <STDIN>;
+    }
+
+    # now techniques
+    my @tech_words = split /\|\|/,
+                           $aref->[$column_for{'dc.subject.techniques'}];
+    my @keep_tech;
+    for my $t (@tech_words) {
+        my $et = encode_utf8($t);
+        if (exists $techniques{$et}) {
+            push @keep_tech, $et;
+        }
+        else {
+            $removed_techniques{$et} .= "$alt_file||";
+        }
+    }
+    $aref->[$column_for{'dc.subject.techniques'}] = fix('||', @keep_tech);
+
+    # now names
+    my @name_words = split /\|\|/,
+                           $aref->[$column_for{'dc.subject.person'}];
+    my @keep_name;
+    for my $t (@name_words) {
+        my $et = encode_utf8($t);
+        if (exists $names{$et}) {
+            push @keep_name, $et;
+        }
+        else {
+            $removed_names{$et} .= "$alt_file||";
+        }
+    }
+    $aref->[$column_for{'dc.subject.person'}] = fix('||', @keep_name);
+
+    # $aref has been all fixed up...
+    $csv->say($out, $aref);
+}
+close $in;
+close $out;
+
+# removed words
+open my $rem_w, '>:encoding(utf8)', 'removed_words.csv'
+    or die "error: cannot create removed_words.csv: $!";
+for my $k (sort keys %removed_words) {
+    $removed_words{$k} =~ s{[|]+ \z}{}xms;
+    print {$rem_w} decode_utf8($k) . ',' . "$removed_words{$k}\n";
+}
+close $rem_w;
+
+# all removed words
+my $ar = 'all_removed.csv';
+my $ar2 = 'all_removed2.csv';
+if (! -f $ar) {
+    open my $all_rem, '>:encoding(utf8)', $ar
+        or die "error: cannot create $ar: $!";
+    print {$all_rem} "Type,Word\n";
+    close $all_rem;
+
+}
+open my $all_rem, '<', $ar 
+    or die "error: cannot open $ar: $!";
+open my $all_rem2, '>:encoding(utf8)', $ar2
+        or die "error: cannot create $ar2: $!";
+my $header_aref = $csv->getline($all_rem);
+
+my $nprev_ingest = @$header_aref - 2;
+# the number of existing ingest file columns
+
+my $ii = $ingest;
+$ii =~ s{[.]csv \z}{}xms;
+push @$header_aref, $ii;
+$csv->say($all_rem2, $header_aref);
+while (my $aref = $csv->getline($all_rem)) {
+    my $ew = encode_utf8($aref->[0]);
+    if (exists $removed_words{$ew}) {
+        push @$aref, $removed_words{$ew};
+        delete $removed_words{$ew};
+    }
+    else {
+        push @$aref, '';
+    }
+    $csv->say($all_rem2, $aref);
+}
+# the ones left we add at the end
+# not sorted alphabetically or by type
+for my $w (sort keys %removed_words) {
+    my $ew = encode_utf8{$w};
+    my @arr;
+    my $c = substr($ew, 0, 1);
+    push @arr,       $c eq uc $c? 'PN'
+              : exists $lex{$ew}? 'E'
+              :                   'S'
+              ;
+    push @arr, $w;
+    push @arr, (',' x $nprev_ingest);
+    push @arr, $removed_words{encode_utf8($w)};
+    $csv->say($all_rem2, \@arr);
+}
+close $all_rem;
+close $all_rem2;
+
+# removed techniques
+open my $rem_t, '>:encoding(utf8)', 'removed_techniques.csv'
+    or die "error: cannot create removed_techniques.csv: $!";
+for my $k (sort keys %removed_techniques) {
+    $removed_techniques{$k} =~ s{[|]+ \z}{}xms;
+    print {$rem_t} decode_utf8($k) . ',' . "$removed_techniques{$k}\n";
+}
+close $rem_t;
+
+# removed names
+open my $rem_n, '>:encoding(utf8)', 'removed_names.csv'
+    or die "error: cannot create removed_names.csv: $!";
+for my $k (sort keys %removed_names) {
+    $removed_names{$k} =~ s{[|]+ \z}{}xms;
+    print {$rem_n} decode_utf8($k) . ',' . "$removed_names{$k}\n";
+}
+close $rem_n;
+
+# backup and rename
+my $x = 0;
+while (-e "backups/$x.$ingest") {
+    ++$x;
+}
+rename $ingest, "backups/$x.$ingest";
+rename $ingest2, $ingest;
+
+# decode_utf8, join, uniq, sort, split
+sub fix {
+    my ($sep, @words) = @_;
+    my @arr;
+    WORD:
+    for my $w (@words) {
+        if (! $w) {
+            next WORD;
+        }
+        push @arr, split m{\Q$sep\E}xms, $w;
+    }
+    return decode_utf8(join $sep, uniq sort @arr);
+}

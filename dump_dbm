@@ -1,15 +1,19 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-
-my $dbm_file = shift;
-if ($dbm_file !~ m{[.]dbm \z}xms) {
-    die "$dbm_file does not have a .dbm suffix!\n";
-}
-
+die "usage: dump_dbm file.dbm\n"
+    unless @ARGV && $ARGV[0] =~ m{\S+[.]dbm \z}xms;
 use DB_File;
 my %hash;
-tie %hash, 'DB_File', $dbm_file;
-while (my ($key, $value) = each %hash) {
-    print "$key => $value\n";
+tie %hash, 'DB_File', $ARGV[0];
+while (my ($k, $v) = each %hash) {
+    if (defined $k && defined $v) {
+        print "$k => $v\n";
+    }
+    elsif (defined $k && ! defined $v) {
+        print "no def v $k\n";
+    }
+    else {
+        print "problem: k '$k' and v '$v'\n";
+    }
 }

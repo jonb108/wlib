@@ -13,7 +13,7 @@ NAME:
 for my $n (@names) {
     my @files = <*$n*>;
     if (! @files) {
-        # print "no file with $n\n";
+        print "no file with $n\n";
         next NAME;
     }
     if (@files > 1) {

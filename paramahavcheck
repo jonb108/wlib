@@ -49,8 +49,8 @@ id identifier dc.identifier?
 aside from id and collection
 the rest are dc. in alphabetical order
     except for
-        dc.subject.other     coming after
-        dc.subject.technique instead of coming after
+        dc.subject.other      coming after
+        dc.subject.techniques instead of coming after
         dc.subject.keyword
 
 dc.subject     or
@@ -92,7 +92,7 @@ should be mapped to these columns:
         found in the document
     dc.subject.person
         Column C - person names in the document
-    dc.subject.technique
+    dc.subject.techniques
         Column D - techniques in the document
     dc.subject.other
         Column E  (variations of keyword, person, techniques) 
@@ -360,7 +360,7 @@ sub add_word {
 
 # variables to communicate from sub process to the loop below
 # sort of a hack...
-my ($dcs_keyword, $dcs_person, $dcs_technique, $dcs_other);
+my ($dcs_keyword, $dcs_person, $dcs_techniques, $dcs_other);
 
 # decode_utf8, join, uniq, sort, split
 sub fix {
@@ -517,10 +517,10 @@ sub process {
             }
         }
     }
-    $dcs_keyword   = fix('||', @eng_san_words);
-    $dcs_person    = fix('||', @name_words);
-    $dcs_technique = fix('||', @technique_words);
-    $dcs_other     = fix('||', @alt_words);
+    $dcs_keyword    = fix('||', @eng_san_words);
+    $dcs_person     = fix('||', @name_words);
+    $dcs_techniques = fix('||', @technique_words);
+    $dcs_other      = fix('||', @alt_words);
 }
 
 
@@ -555,10 +555,10 @@ while (my $aref = $csv->getline($in)) {
     my $txt = "$f.txt";             # add .txt
     if (-e $txt) {
         process($txt);      # most of the work...
-        $value_of{'dc.subject.keyword'}   = $dcs_keyword;
-        $value_of{'dc.subject.person'}    = $dcs_person;
-        $value_of{'dc.subject.technique'} = $dcs_technique;
-        $value_of{'dc.subject.other'}     = $dcs_other;
+        $value_of{'dc.subject.keyword'}    = $dcs_keyword;
+        $value_of{'dc.subject.person'}     = $dcs_person;
+        $value_of{'dc.subject.techniques'} = $dcs_techniques;
+        $value_of{'dc.subject.other'}      = $dcs_other;
     }
     else {
         print "skipping: NO $txt\n";

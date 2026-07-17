@@ -216,7 +216,9 @@ if ($debug) {
 # and do some checking of date format, required fields, etc
 #
 my %ingest_fnames;
+my $line_no;
 while (my $aref = $csv->getline($in)) {
+    ++$line_no;
     # convert array ref to a hash with key of column header
     my %value_of;
     for my $h (@headers) {
@@ -232,14 +234,14 @@ while (my $aref = $csv->getline($in)) {
     $ingest_fnames{$f} = 1;
     for my $r (@required) {
         if ($value_of{$r} !~ m{\S}xms) {
-            print "error: missing required value: '$r' for $f\n";
+            print "error: line $line_no - missing required value: '$r' for $f\n";
             ++$err;
         }
     }
     my $dt = $value_of{'dc.date.created'};
     if ($dt && $dt !~ m{\A \d\d\d\d-\d\d-\d\d \z}xms) {
         # check for valid date?  nah.
-        print "error: invalid 'dc.date.created': $dt for $f\n";
+        print "error: line $line_no - invalid 'dc.date.created': $dt for $f\n";
         ++$err;
     }
 }
